@@ -12,11 +12,12 @@ from albumentations import (
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
-from torchvision.models import EfficientNet_B0_Weights, EfficientNet_V2_S_Weights, EfficientNet_V2_M_Weights
+from torchvision.models import EfficientNet_V2_S_Weights
 from tqdm import tqdm
 
+
 def set_up_data():
-    with zipfile.ZipFile('dataset/wolves_and_dogs.zip', 'r') as zip_ref:
+    with zipfile.ZipFile('dataset/wo.zip', 'r') as zip_ref:
         zip_ref.extractall('dataset')
 
 
@@ -26,7 +27,7 @@ class ImageDataset(Dataset):
         self.transform = transform
         self.samples = []
 
-        for label, cls in enumerate(['0', '1', '2', '3', '4', '5']):
+        for label, cls in enumerate(['dogs', 'wolves']):
             folder = self.root_path.joinpath(cls)
             for fname in os.listdir(folder):
                 self.samples.append((os.path.join(folder, fname), label))
@@ -48,7 +49,7 @@ class ImageDataset(Dataset):
 
 def train():
     train_transform = Compose([
-        Resize(150, 150),
+        Resize(224, 224),
         HorizontalFlip(p=0.5),
         RandomBrightnessContrast(),
         GaussNoise(p=0.2),
@@ -57,25 +58,26 @@ def train():
     ])
 
     val_transform = Compose([
-        Resize(150, 150),
+        Resize(224, 224),
         Normalize(),
         ToTensorV2(),
     ])
 
-    train_ds = ImageDataset('dataset/scene/train', transform=train_transform)
-    val_ds = ImageDataset('dataset/scene/val', transform=val_transform)
+    train_ds = ImageDataset('dataset/wolves_and_dogs/train', transform=train_transform)
+    val_ds = ImageDataset('dataset/wolves_and_dogs/val', transform=val_transform)
 
     train_loader = DataLoader(train_ds, batch_size=32, shuffle=True, num_workers=8)
     val_loader = DataLoader(val_ds, batch_size=32, shuffle=False, num_workers=8)
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
     print(device)
-    model = models.efficientnet_v2_m(weights=EfficientNet_V2_M_Weights.DEFAULT)
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, 6)
+    model = models.efficientnet_v2_s(weights=EfficientNet_V2_S_Weights.DEFAULT)
+    model.classifier[1] = nn.Linear(model.classifier[1].in_features, 2)
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     def train_one_epoch():
         model.train()
@@ -120,10 +122,10 @@ def train():
         print(f'Epoch {epoch + 1}, Loss={loss:.4f}, Val Acc={acc:.4f}')
         if acc > best_acc:
             best_acc = acc
-            torch.save(model.state_dict(), 'weights/best_model_6m.pth')
+            torch.save(model.state_dict(), 'weights/best_model_2s.pth')
             print('✓ Saved new best model')
 
-    torch.save(model, 'weights/last_model_6m.pt')
+    torch.save(model, 'weights/last_model_2s.pt')
 
 
 if __name__ == '__main__':
