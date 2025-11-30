@@ -12,12 +12,12 @@ from albumentations import (
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
-from torchvision.models import EfficientNet_V2_M_Weights
+from torchvision.models import EfficientNet_V2_S_Weights
 from tqdm import tqdm
 
 
 def set_up_data():
-    with zipfile.ZipFile('dataset/scene.zip', 'r') as zip_ref:
+    with zipfile.ZipFile('dataset/indoors_and_outdoors.zip', 'r') as zip_ref:
         zip_ref.extractall('dataset')
 
 
@@ -27,7 +27,7 @@ class ImageDataset(Dataset):
         self.transform = transform
         self.samples = []
 
-        for label, cls in enumerate(['0', '1', '2', '3', '4', '5']):
+        for label, cls in enumerate(['indoor', 'outdoor']):
             folder = self.root_path.joinpath(cls)
             for fname in os.listdir(folder):
                 self.samples.append((os.path.join(folder, fname), label))
@@ -49,7 +49,7 @@ class ImageDataset(Dataset):
 
 def train():
     train_transform = Compose([
-        Resize(150, 150),
+        Resize(224, 224),
         HorizontalFlip(p=0.5),
         RandomBrightnessContrast(),
         GaussNoise(p=0.2),
@@ -58,25 +58,26 @@ def train():
     ])
 
     val_transform = Compose([
-        Resize(150, 150),
+        Resize(224, 224),
         Normalize(),
         ToTensorV2(),
     ])
 
-    train_ds = ImageDataset('dataset/scene/train', transform=train_transform)
-    val_ds = ImageDataset('dataset/scene/val', transform=val_transform)
+    train_ds = ImageDataset('dataset/indoors_and_outdoors/train', transform=train_transform)
+    val_ds = ImageDataset('dataset/indoors_and_outdoors/val', transform=val_transform)
 
     train_loader = DataLoader(train_ds, batch_size=32, shuffle=True, num_workers=8)
     val_loader = DataLoader(val_ds, batch_size=32, shuffle=False, num_workers=8)
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    # device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cpu'
     print(device)
-    model = models.efficientnet_v2_m(weights=EfficientNet_V2_M_Weights.DEFAULT)
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, 6)
+    model = models.efficientnet_v2_s(weights=EfficientNet_V2_S_Weights.DEFAULT)
+    model.classifier[1] = nn.Linear(model.classifier[1].in_features, 2)
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     def train_one_epoch():
         model.train()
@@ -114,19 +115,59 @@ def train():
 
     best_acc = 0
 
-    for epoch in range(100):
+    for epoch in range(10):
         loss = train_one_epoch()
         acc = validate()
 
         print(f'Epoch {epoch + 1}, Loss={loss:.4f}, Val Acc={acc:.4f}')
         if acc > best_acc:
             best_acc = acc
-            torch.save(model.state_dict(), 'weights/best_model_6m.pth')
+            torch.save(model.state_dict(), 'weights/best_model_indoor_outdoor.pth')
             print('✓ Saved new best model')
 
-    torch.save(model, 'weights/last_model_6m.pt')
+    torch.save(model, 'weights/last_model_indoor_outdoor.pt')
+
+
+def predict(img_path, class_names):
+    model = torch.load('weights/last_model_indoor_outdoor.pt', weights_only=False)
+    model.eval()
+
+    img = cv2.imread(img_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    test_transform = Compose([
+        Resize(224, 224),
+        Normalize(),
+        ToTensorV2(),
+    ])
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    tensor = test_transform(image=img)["image"].unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        logits = model(tensor)
+        prob = torch.softmax(logits, dim=1)[0]
+        label = prob.argmax().item()
+        print(class_names[label], prob[label])
+    return class_names[label], prob[label]
 
 
 if __name__ == '__main__':
-    # set_up_data()
+    set_up_data()
     train()
+    label_dict = {
+        0: 'Indoor',
+        1: 'Outdoor'
+    }
+    with open('predict_indoor_outdoor.html', 'a') as f:
+        for root, dirnames, filenames in os.walk("dataset/indoors_and_outdoors/test"):
+            for filename in filenames:
+                file = Path(root, filename).as_posix()
+                r = predict(file, [0, 1])
+                print(r)
+                label, prob = r
+                f.write(f'''
+                <figure><img src="{file}" alt="{prob}"><figcaption>{label_dict[label]}</figcaption></figure><br>\n
+                ''')
+                f.flush()
