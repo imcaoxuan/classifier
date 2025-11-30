@@ -12,8 +12,9 @@ from albumentations import (
 from albumentations.pytorch import ToTensorV2
 from torch.utils.data import Dataset, DataLoader
 from torchvision import models
-from torchvision.models import EfficientNet_B0_Weights, EfficientNet_V2_S_Weights, EfficientNet_V2_M_Weights
+from torchvision.models import EfficientNet_V2_M_Weights
 from tqdm import tqdm
+
 
 def set_up_data():
     with zipfile.ZipFile('dataset/wolves_and_dogs.zip', 'r') as zip_ref:
@@ -75,7 +76,7 @@ def train():
     model = model.to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
     def train_one_epoch():
         model.train()
@@ -113,7 +114,7 @@ def train():
 
     best_acc = 0
 
-    for epoch in range(10):
+    for epoch in range(100):
         loss = train_one_epoch()
         acc = validate()
 

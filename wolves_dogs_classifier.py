@@ -128,6 +128,46 @@ def train():
     torch.save(model, 'weights/last_model_2s.pt')
 
 
+def predict(img_path, class_names):
+    model = torch.load('weights/last_model_2s.pt', weights_only=False)
+    model.eval()
+
+    img = cv2.imread(img_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    test_transform = Compose([
+        Resize(224, 224),
+        Normalize(),
+        ToTensorV2(),
+    ])
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    tensor = test_transform(image=img)["image"].unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        logits = model(tensor)
+        prob = torch.softmax(logits, dim=1)[0]
+        label = prob.argmax().item()
+        print(class_names[label], prob[label])
+    return class_names[label], prob[label]
+
+
 if __name__ == '__main__':
     # set_up_data()
-    train()
+    # train()
+    label_dict = {
+        0: 'Dogs',
+        1: 'Wolves'
+    }
+    with open('predict2.html', 'a') as f:
+        for root, dirnames, filenames in os.walk("dataset/wolves_and_dogs/test"):
+            for filename in filenames:
+                file = Path(root, filename).as_posix()
+                r = predict(file, [0, 1, 2, 3, 4, 5])
+                print(r)
+                label, prob = r
+                f.write(f'''
+                <figure><img src="{file}" alt="{prob}"><figcaption>{label_dict[label]}</figcaption></figure><br>\n
+                ''')
+                f.flush()
