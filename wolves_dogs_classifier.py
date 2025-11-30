@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 
 def set_up_data():
-    with zipfile.ZipFile('dataset/wo.zip', 'r') as zip_ref:
+    with zipfile.ZipFile('dataset/wolves_and_dogs.zip', 'r') as zip_ref:
         zip_ref.extractall('dataset')
 
 
@@ -154,8 +154,8 @@ def predict(img_path, class_names):
 
 
 if __name__ == '__main__':
-    # set_up_data()
-    # train()
+    set_up_data()
+    train()
     label_dict = {
         0: 'Dogs',
         1: 'Wolves'
@@ -164,7 +164,7 @@ if __name__ == '__main__':
         for root, dirnames, filenames in os.walk("dataset/wolves_and_dogs/test"):
             for filename in filenames:
                 file = Path(root, filename).as_posix()
-                r = predict(file, [0, 1, 2, 3, 4, 5])
+                r = predict(file, [0, 1])
                 print(r)
                 label, prob = r
                 f.write(f'''
